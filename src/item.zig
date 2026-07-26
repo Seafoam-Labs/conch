@@ -6,56 +6,90 @@ const Connection = goose.Connection;
 
 pub const SNI_INTERFACE = "org.kde.StatusNotifierItem";
 
+pub const ScrollDirection = enum {
+    up,
+    down,
+};
+
+pub const Pixmap = struct {
+    width: i32,
+    height: i32,
+    data: []const u8,
+};
+
+pub const ToolTip = struct {
+    standard_title: []const u8 = "",
+    standard_description: []const u8 = "",
+    standard_icon: []const u8 = "",
+    alternate_title: []const u8 = "",
+    alternate_description: []const u8 = "",
+};
+
 pub const Config = struct {
     id: [:0]const u8,
     title: [:0]const u8,
     icon_name: [:0]const u8,
     status: [:0]const u8 = "Active",
     category: [:0]const u8 = "ApplicationStatus",
+    icon_theme_path: [:0]const u8 = "",
+    icon_pixmap: []const Pixmap = &.{},
+    tool_tip: ?ToolTip = null,
+    attention_icon_name: [:0]const u8 = "",
+    user_ctx: ?*anyopaque = null,
+    on_activate: ?ActivateFn = null,
+    on_secondary_activate: ?SecondaryActivateFn = null,
+    on_context_menu: ?ContextMenuFn = null,
 };
+
+pub const ActivateFn = *const fn (ctx: ?*anyopaque, x: i32, y: i32) void;
+pub const SecondaryActivateFn = *const fn (ctx: ?*anyopaque, x: i32, y: i32) void;
+pub const ContextMenuFn = *const fn (ctx: ?*anyopaque, x: i32, y: i32) void;
 
 pub const Item = struct {
     conn: *Connection,
+    cfg: *const Config,
 
-    Category: goose.Property(GStr, .Read) = goose.property(GStr, .Read, GStr.new("ApplicationStatus")),
-    Id: goose.Property(GStr, .Read) = goose.property(GStr, .Read, GStr.new("")),
-    Title: goose.Property(GStr, .Read) = goose.property(GStr, .Read, GStr.new("")),
-    Status: goose.Property(GStr, .Read) = goose.property(GStr, .Read, GStr.new("Active")),
-    IconName: goose.Property(GStr, .Read) = goose.property(GStr, .Read, GStr.new("")),
-    Menu: goose.Property(GStr, .Read) = goose.property(GStr, .Read, GStr.new("/")),
+    Category: goose.Property(GStr, .Read),
+    Id: goose.Property(GStr, .Read),
+    Title: goose.Property(GStr, .Read),
+    Status: goose.Property(GStr, .Read),
+    IconName: goose.Property(GStr, .Read),
+    IconThemePath: goose.Property(GStr, .Read),
+    Menu: goose.Property(GStr, .Read),
+    RequestAttentionIconName: goose.Property(GStr, .Read),
 
     pub const INTERFACE_NAME = SNI_INTERFACE;
 
     pub fn init(conn: *Connection, config: *const Config) @This() {
         return Item{
             .conn = conn,
+            .cfg = config,
             .Category = goose.property(GStr, .Read, GStr.new(config.category)),
             .Id = goose.property(GStr, .Read, GStr.new(config.id)),
             .Title = goose.property(GStr, .Read, GStr.new(config.title)),
             .Status = goose.property(GStr, .Read, GStr.new(config.status)),
             .IconName = goose.property(GStr, .Read, GStr.new(config.icon_name)),
+            .IconThemePath = goose.property(GStr, .Read, GStr.new(config.icon_theme_path)),
             .Menu = goose.property(GStr, .Read, GStr.new("/")),
+            .RequestAttentionIconName = goose.property(GStr, .Read, GStr.new(config.attention_icon_name)),
         };
     }
 
     pub fn Activate(self: *@This(), x: i32, y: i32) !void {
-        _ = self;
-        _ = x;
-        _ = y;
-        std.debug.print("[sni] Activate\n", .{});
+        if (self.cfg.on_activate) |cb| {
+            cb(self.cfg.user_ctx, x, y);
+        }
     }
 
     pub fn SecondaryActivate(self: *@This(), x: i32, y: i32) !void {
-        _ = self;
-        _ = x;
-        _ = y;
-        std.debug.print("[sni] SecondaryActivate\n", .{});
+        if (self.cfg.on_secondary_activate) |cb| {
+            cb(self.cfg.user_ctx, x, y);
+        }
     }
 
     pub fn ContextMenu(self: *@This(), x: i32, y: i32) !void {
-        _ = self;
-        _ = x;
-        _ = y;
-        std.debug.print("[sni] ContextMenu\n", .{});
+        if (self.cfg.on_context_menu) |cb| {
+            cb(self.cfg.user_ctx, x, y);
+        }
     }
 };

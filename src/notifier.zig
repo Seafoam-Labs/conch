@@ -37,6 +37,7 @@ pub const Notification = struct {
     icon: [:0]const u8 = "",
     summary: [:0]const u8,
     body: [:0]const u8 = "",
+    tooltip: [:0]const u8 = "",
     timeout_ms: i32 = -1,
     replaces_id: u32 = 0,
     actions: []const Action = &.{},

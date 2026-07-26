@@ -10,6 +10,21 @@ pub fn build(b: *std.Build) void {
     });
     const goose_mod = goose_dep.module("goose");
 
+    const lib_mod = b.createModule(.{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+        .imports = &.{
+            .{ .name = "goose", .module = goose_mod },
+        },
+    });
+
+    const lib = b.addLibrary(.{
+        .name = "zsn",
+        .root_module = lib_mod,
+    });
+    b.installArtifact(lib);
+
     const exe = b.addExecutable(.{
         .name = "zsn",
         .root_module = b.createModule(.{
@@ -18,6 +33,7 @@ pub fn build(b: *std.Build) void {
             .optimize = optimize,
             .imports = &.{
                 .{ .name = "goose", .module = goose_mod },
+                .{ .name = "zsn", .module = lib_mod },
             },
         }),
     });
@@ -31,7 +47,7 @@ pub fn build(b: *std.Build) void {
 
     const tests = b.addTest(.{
         .root_module = b.createModule(.{
-            .root_source_file = b.path("src/main.zig"),
+            .root_source_file = b.path("src/root.zig"),
             .target = target,
             .optimize = optimize,
             .imports = &.{
