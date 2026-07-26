@@ -86,7 +86,7 @@ pub const Item = struct {
             .Status = goose.property(GStr, .Read, GStr.new(config.status)),
             .IconName = goose.property(GStr, .Read, GStr.new(config.icon_name)),
             .IconThemePath = goose.property(GStr, .Read, GStr.new(config.icon_theme_path)),
-            .Menu = goose.property(GStr, .Read, GStr.new("/")),
+            .Menu = goose.property(GStr, .Read, GStr.new("/MenuBar")),
             .AttentionIconName = goose.property(GStr, .Read, GStr.new(config.attention_icon_name)),
         };
     }
