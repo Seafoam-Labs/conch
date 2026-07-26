@@ -16,6 +16,13 @@ pub const NOTIFY_SIGNATURE = "susssasa{sv}i";
 const HintValue = union(enum) {
     str: GStr,
     int: i32,
+    byte: u8,
+};
+
+pub const Urgency = enum(u8) {
+    low = 0,
+    normal = 1,
+    critical = 2,
 };
 
 const Hint = struct {
@@ -39,6 +46,7 @@ pub const Notification = struct {
     body: [:0]const u8 = "",
     tooltip: [:0]const u8 = "",
     timeout_ms: i32 = -1,
+    urgency: Urgency = .normal,
     replaces_id: u32 = 0,
     actions: []const Action = &.{},
     on_activate: ?ActivateFn = null,
@@ -94,7 +102,10 @@ pub const Notifier = struct {
             w += 2;
         }
         const actions: []const GStr = strs;
-        const hints: []const Hint = &.{};
+        const hint_arr = [_]Hint{
+            .{ .key = GStr.new("urgency"), .value = .{ .byte = @intFromEnum(n.urgency) } },
+        };
+        const hints: []const Hint = &hint_arr;
 
         var enc = try BodyEncoder.encode(alloc, .{
             GStr.new(n.app_name),
