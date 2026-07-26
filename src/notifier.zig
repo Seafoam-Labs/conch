@@ -49,6 +49,7 @@ pub const Notification = struct {
     urgency: Urgency = .normal,
     replaces_id: u32 = 0,
     actions: []const Action = &.{},
+    desktop_entry: [:0]const u8 = "",
     on_activate: ?ActivateFn = null,
     on_action: ?ActionFn = null,
     on_closed: ?ClosedFn = null,
@@ -102,10 +103,13 @@ pub const Notifier = struct {
             w += 2;
         }
         const actions: []const GStr = strs;
-        const hint_arr = [_]Hint{
-            .{ .key = GStr.new("urgency"), .value = .{ .byte = @intFromEnum(n.urgency) } },
-        };
-        const hints: []const Hint = &hint_arr;
+        var hint_list = std.ArrayList(Hint).empty;
+        defer hint_list.deinit(alloc);
+        try hint_list.append(alloc, .{ .key = GStr.new("urgency"), .value = .{ .byte = @intFromEnum(n.urgency) } });
+        if (n.desktop_entry.len > 0) {
+            try hint_list.append(alloc, .{ .key = GStr.new("desktop-entry"), .value = .{ .str = GStr.new(n.desktop_entry) } });
+        }
+        const hints: []const Hint = hint_list.items;
 
         var enc = try BodyEncoder.encode(alloc, .{
             GStr.new(n.app_name),
