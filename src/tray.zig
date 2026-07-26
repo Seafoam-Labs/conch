@@ -83,7 +83,24 @@ pub const Tray = struct {
         try self.emit_signal("NewToolTip");
     }
 
-    fn emit_signal(self: *Tray, member: [*:0]const u8) !void {
+    pub fn setStatus(self: *Tray, status: item.Status) !void {
+        const conn = self.service.connection();
+        const handle = self.handle orelse return error.NotRegistered;
+        const it: *Item = @ptrCast(@alignCast(conn.registered_interfaces.items[handle].instance));
+        it.Status = goose.property(GStr, .Read, GStr.new(status.wire()));
+
+        try self.emit_signal("NewStatus");
+    }
+
+    pub fn setAttentionIcon(self: *Tray, name: [:0]const u8) !void {
+        const conn = self.service.connection();
+        const handle = self.handle orelse return error.NotRegistered;
+        const it: *item.Item = @ptrCast(@alignCast(conn.registered_interfaces.items[handle].instance));
+        it.AttentionIconName = goose.property(GStr, .Read, GStr.new(name));
+        try self.emit_signal("NewAttentionIcon");
+    }
+
+    fn emit_signal(self: *Tray, member: [:0]const u8) !void {
         const conn = self.service.connection();
         const serial = conn.serial_counter;
         conn.serial_counter += 1;

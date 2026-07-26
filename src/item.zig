@@ -6,6 +6,22 @@ const Connection = goose.Connection;
 
 pub const SNI_INTERFACE = "org.kde.StatusNotifierItem";
 
+/// SNI item status. Active = normal, Passive = de-emphasized/hidden by some
+/// hosts, NeedsAttention = urgent (hosts highlight/animate the icon).
+pub const Status = enum {
+    active,
+    passive,
+    needs_attention,
+
+    pub fn wire(self: Status) [:0]const u8 {
+        return switch (self) {
+            .active => "Active",
+            .passive => "Passive",
+            .needs_attention => "NeedsAttention",
+        };
+    }
+};
+
 pub const ScrollDirection = enum {
     up,
     down,
@@ -56,7 +72,7 @@ pub const Item = struct {
     IconName: goose.Property(GStr, .Read),
     IconThemePath: goose.Property(GStr, .Read),
     Menu: goose.Property(GStr, .Read),
-    RequestAttentionIconName: goose.Property(GStr, .Read),
+    AttentionIconName: goose.Property(GStr, .Read) = goose.property(GStr, .Read, GStr.new("")),
 
     pub const INTERFACE_NAME = SNI_INTERFACE;
 
@@ -71,7 +87,7 @@ pub const Item = struct {
             .IconName = goose.property(GStr, .Read, GStr.new(config.icon_name)),
             .IconThemePath = goose.property(GStr, .Read, GStr.new(config.icon_theme_path)),
             .Menu = goose.property(GStr, .Read, GStr.new("/")),
-            .RequestAttentionIconName = goose.property(GStr, .Read, GStr.new(config.attention_icon_name)),
+            .AttentionIconName = goose.property(GStr, .Read, GStr.new(config.attention_icon_name)),
         };
     }
 
