@@ -15,17 +15,20 @@ pub const ActionFn = notifier.ActionFn;
 pub const ClosedFn = notifier.ClosedFn;
 pub const ActivateFn = notifier.ActivateFn;
 pub const Capabilities = capabilities.Capabilities;
+pub const Urgency = notifier.Urgency;
 pub const Tray = tray.Tray;
 pub const Config = item.Config;
 pub const Item = item.Item;
 pub const Pixmap = item.Pixmap;
 pub const ToolTip = item.ToolTip;
+pub const Status = item.Status;
 pub const ScrollDirection = item.ScrollDirection;
 pub const Menu = menu.Menu;
 pub const MenuItem = menu.MenuItem;
 pub const MenuState = menu.MenuState;
 pub const MenuController = menu.MenuController;
 pub const Tree = menu.Tree;
+pub const ItemType = menu.ItemType;
 
 test {
     std.testing.refAllDecls(service);
