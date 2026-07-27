@@ -3,6 +3,7 @@ const goose = @import("goose");
 
 const GStr = goose.core.value.GStr;
 const Connection = goose.Connection;
+const GPath = goose.core.value.GPath;
 
 pub const SNI_INTERFACE = "org.kde.StatusNotifierItem";
 
@@ -71,7 +72,7 @@ pub const Item = struct {
     Status: goose.Property(GStr, .Read),
     IconName: goose.Property(GStr, .Read),
     IconThemePath: goose.Property(GStr, .Read),
-    Menu: goose.Property(GStr, .Read),
+    Menu: goose.Property(GPath, .Read),
     AttentionIconName: goose.Property(GStr, .Read) = goose.property(GStr, .Read, GStr.new("")),
 
     pub const INTERFACE_NAME = SNI_INTERFACE;
@@ -86,7 +87,7 @@ pub const Item = struct {
             .Status = goose.property(GStr, .Read, GStr.new(config.status)),
             .IconName = goose.property(GStr, .Read, GStr.new(config.icon_name)),
             .IconThemePath = goose.property(GStr, .Read, GStr.new(config.icon_theme_path)),
-            .Menu = goose.property(GStr, .Read, GStr.new("/MenuBar")),
+            .Menu = goose.property(GPath, .Read, GPath.new("/MenuBar")),
             .AttentionIconName = goose.property(GStr, .Read, GStr.new(config.attention_icon_name)),
         };
     }

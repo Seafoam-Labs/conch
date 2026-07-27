@@ -64,6 +64,56 @@ pub const BuilderFn = *const fn (ctx: ?*anyopaque, arena: std.mem.Allocator) any
 
 pub const EventFn = *const fn (ctx: ?*anyopaque, id: i32) void;
 
+pub const GroupPropsValue = struct {
+    state: *MenuState,
+    ids: []const i32,
+    pub const SIGNATURE: [:0]const u8 = "a(ia{sv})";
+    pub fn ser(self: GroupPropsValue, w: *DBusWriter) !void {
+        try w.padTo(4);
+        const len_pos = w.buffer.items.len;
+        try w.buffer.appendNTimes(w.gpa, 0, 4);
+        try w.padTo(8);
+        const start = w.buffer.items.len;
+        const root = try self.state.buildTree();
+        _ = root;
+        for (self.ids) |id| {
+            const item = self.state.current_tree.find(id) orelse continue;
+            try w.padTo(8);
+            try w.writeInt(i32, item.id);
+            try write_props(w, item);
+        }
+        const arr_bytes: u32 = @intCast(w.buffer.items.len - start);
+        w.writeU32At(len_pos, arr_bytes);
+    }
+};
+
+pub const EventGroupResult = struct {
+    failed: []const i32 = &.{},
+    pub const SIGNATURE: [:0]const u8 = "ai";
+    pub fn ser(self: EventGroupResult, w: *DBusWriter) !void {
+        try w.padTo(4);
+        const len_pos = w.buffer.items.len;
+        try w.buffer.appendNTimes(w.gpa, 0, 4);
+        try w.padTo(4);
+        const start = w.buffer.items.len;
+        for (self.failed) |id| try w.writeInt(i32, id);
+        const arr_bytes: u32 = @intCast(w.buffer.items.len - start);
+        w.writeU32At(len_pos, arr_bytes);
+    }
+};
+
+pub const AboutToShowGroupResult = struct {
+    pub const SIGNATURE: [:0]const u8 = "aiai";
+    pub fn ser(self: AboutToShowGroupResult, w: *DBusWriter) !void {
+        _ = self;
+
+        try w.padTo(4);
+        try w.writeInt(u32, 0);
+        try w.padTo(4);
+        try w.writeInt(u32, 0);
+    }
+};
+
 pub const MenuState = struct {
     builder: BuilderFn,
     on_event: ?EventFn = null,
@@ -132,16 +182,37 @@ pub const Menu = struct {
         self: *@This(),
         ids: []const i32,
         property_names: []const GStr,
-    ) !void {
-        _ = self;
+    ) !GroupPropsValue {
         _ = property_names;
-        std.debug.print("[menu] GetGroupProperties called with {d} ids\n", .{ids.len});
+        return .{ .state = self.state, .ids = ids };
     }
 
     pub fn AboutToShow(self: *@This(), id: i32) !bool {
         _ = self;
         _ = id;
         return true;
+    }
+
+    pub const GroupEvent = struct {
+        id: i32,
+        event_id: GStr,
+        data: EventData,
+        timestamp: u32,
+    };
+
+    pub fn EventGroup(self: *@This(), events: []const GroupEvent) !EventGroupResult {
+        for (events) |ev| {
+            if (std.mem.eql(u8, ev.event_id.s, "clicked")) {
+                if (self.state.on_event) |cb| cb(self.state.ctx, ev.id);
+            }
+        }
+        return .{};
+    }
+
+    pub fn AboutToShowGroup(self: *@This(), ids: []const i32) !AboutToShowGroupResult {
+        _ = self;
+        _ = ids;
+        return .{};
     }
 };
 
@@ -381,6 +452,26 @@ test "depth 0 omits children" {
     try std.testing.expect(!containsBytes(buf.items, "Open"));
 }
 
+fn testTreeFor(app_ignored: ?*anyopaque, arena: std.mem.Allocator) anyerror!Tree {
+    _ = app_ignored;
+    var items = std.ArrayList(MenuItem).empty;
+    try items.append(arena, .{ .id = 1, .label = "Open" });
+    try items.append(arena, .{ .id = 2, .label = "Quit" });
+    return .{ .root = .{ .id = 0, .children = try items.toOwnedSlice(arena) } };
+}
+
+fn serializeGroupProps(alloc: std.mem.Allocator, state: *MenuState, ids: []const i32) !std.ArrayList(u8) {
+    var buf = std.ArrayList(u8).empty;
+    var w = DBusWriter.init(&buf, alloc, .little);
+    const gpv = GroupPropsValue{ .state = state, .ids = ids };
+    try gpv.ser(&w);
+    return buf;
+}
+
+fn bytesContain(hay: []const u8, needle: []const u8) bool {
+    return std.mem.indexOf(u8, hay, needle) != null;
+}
+
 test "separator emits type=separator and no label" {
     const alloc = std.testing.allocator;
     const sep = MenuItem{ .id = 5, .type = .separator };
@@ -402,4 +493,49 @@ test "array length words are non-zero when populated" {
     // props dict must have a non-zero byte length.
     const props_len = std.mem.readInt(u32, buf.items[4..8], .little);
     try std.testing.expect(props_len > 0);
+}
+
+test "GroupPropsValue: requested ids produce their props" {
+    const alloc = std.testing.allocator;
+    var state = MenuState.init(alloc, testTreeFor);
+    defer state.deinit();
+
+    var buf = try serializeGroupProps(alloc, &state, &.{ 1, 2 });
+    defer buf.deinit(alloc);
+
+    // outer array length word (first 4 bytes) must be non-zero
+    const arr_len = std.mem.readInt(u32, buf.items[0..4], .little);
+    try std.testing.expect(arr_len > 0);
+
+    // both requested items' labels must appear
+    try std.testing.expect(bytesContain(buf.items, "Open"));
+    try std.testing.expect(bytesContain(buf.items, "Quit"));
+    // and the property key
+    try std.testing.expect(bytesContain(buf.items, "label"));
+}
+
+test "GroupPropsValue: unknown id is skipped, not crashed" {
+    const alloc = std.testing.allocator;
+    var state = MenuState.init(alloc, testTreeFor);
+    defer state.deinit();
+
+    // id 999 doesn't exist; id 1 does. Should emit only id 1's props.
+    var buf = try serializeGroupProps(alloc, &state, &.{ 999, 1 });
+    defer buf.deinit(alloc);
+
+    try std.testing.expect(bytesContain(buf.items, "Open")); // id 1 present
+    try std.testing.expect(!bytesContain(buf.items, "Quit")); // id 2 not requested
+}
+
+test "GroupPropsValue: empty id list yields empty array" {
+    const alloc = std.testing.allocator;
+    var state = MenuState.init(alloc, testTreeFor);
+    defer state.deinit();
+
+    var buf = try serializeGroupProps(alloc, &state, &.{});
+    defer buf.deinit(alloc);
+
+    // array length word should be 0 (no elements)
+    const arr_len = std.mem.readInt(u32, buf.items[0..4], .little);
+    try std.testing.expectEqual(@as(u32, 0), arr_len);
 }
