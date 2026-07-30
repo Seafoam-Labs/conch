@@ -1,4 +1,4 @@
-# zsn
+# conch
 
 A [Zig](https://ziglang.org) library for **system tray icons** and **desktop notifications** via D-Bus.
 

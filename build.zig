@@ -10,7 +10,7 @@ pub fn build(b: *std.Build) void {
     });
     const goose_mod = goose_dep.module("goose");
 
-    const lib_mod = b.addModule("zsn", .{
+    const lib_mod = b.addModule("conch", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
