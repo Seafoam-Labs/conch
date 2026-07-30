@@ -6,6 +6,7 @@ pub const capabilities = @import("capabilities.zig");
 pub const tray = @import("tray.zig");
 pub const item = @import("item.zig");
 pub const menu = @import("menu.zig");
+pub const mutableItem = @import("mutableItem.zig");
 
 pub const Service = service.Service;
 pub const Notifier = notifier.Notifier;
@@ -29,6 +30,7 @@ pub const MenuState = menu.MenuState;
 pub const MenuController = menu.MenuController;
 pub const Tree = menu.Tree;
 pub const ItemType = menu.ItemType;
+pub const MutableItem = mutableItem.MutableItem;
 
 test {
     std.testing.refAllDecls(service);
@@ -37,6 +39,7 @@ test {
     std.testing.refAllDecls(tray);
     std.testing.refAllDecls(item);
     std.testing.refAllDecls(menu);
+    std.testing.refAllDecls(mutableItem);
 
     _ = Service;
     _ = Notifier;
@@ -46,4 +49,5 @@ test {
     _ = Item;
     _ = Config;
     _ = Menu;
+    _ = MutableItem;
 }
