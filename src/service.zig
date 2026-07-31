@@ -29,14 +29,26 @@ pub const Service = struct {
         try self.conn.waitOnHandle(handle);
     }
 
-    /// Process one message: dispatch a matching signal to its handler, or return.
-    /// This is the primitive; the caller decides how to drive it.
     pub fn dispatchOne(self: *Service) !void {
         var msg = try self.conn.waitMessage();
         self.conn.freeMessage(&msg);
     }
 
-    /// `while (true) try tick();`. Most apps want their own loop instead.
+    pub fn waitMessageTimeout(self: *Service, timeout: std.Io.Timeout) !?goose.core.Message {
+        return self.conn.waitMessageTimeout(timeout);
+    }
+
+    pub fn tickTimeout(self: *Service, timeout: std.Io.Timeout) !bool {
+        return self.conn.tickTimeout(timeout);
+    }
+
+    pub fn runEventLoop(self: *Service, comptime tick_ms: u64, ctx: anytype, comptime onTick: fn (@TypeOf(ctx)) void) !void {
+        while (true) {
+            _ = try self.tickTimeout(.{ .duration = .fromMillis(tick_ms) });
+            onTick(ctx);
+        }
+    }
+
     pub fn processNext(self: *Service) !void {
         while (true) try self.dispatchOne();
     }
