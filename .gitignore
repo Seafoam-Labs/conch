@@ -1,0 +1,4 @@
+.zig-cache/
+zig-out/bin/zsn
+zig-out/lib/libzsn.a
+zig-pkg/goose-1.0.0-e9MzMDudAgApAjcWS4MwCl4gLIDrt0RawACOXeZrjQoG/
