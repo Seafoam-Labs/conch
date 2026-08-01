@@ -82,7 +82,7 @@ pub const Item = struct {
     NewOverlayIcon: goose.Signal(void) = goose.signal("NewOverlayIcon", void),
     NewToolTip: goose.Signal(void) = goose.signal("NewToolTip", void),
     NewTitle: goose.Signal = goose.signal("NewTitle", void),
-    NewStatus: goose.Signal(GStr) = goose.signal("NewStatus", GStr),
+    NewStatus: goose.Signal(GStr, .Read) = goose.signal("NewStatus", GStr),
     IconPixmap: goose.Property([]const Pixmap, .Read),
 
     pub const INTERFACE_NAME = SNI_INTERFACE;
