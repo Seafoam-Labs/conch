@@ -166,5 +166,6 @@ pub const Service = struct {
         if (reply.header.message_type == .Error) return error.NameCheckFailed;
 
         var dec = goose.message.BodyDecoder.fromMessage(alloc, reply);
-        retur
+        return try dec.decode(bool);
+    }
 };
