@@ -56,8 +56,10 @@ pub const Config = struct {
     on_activate: ?ActivateFn = null,
     on_secondary_activate: ?SecondaryActivateFn = null,
     on_context_menu: ?ContextMenuFn = null,
+    on_xdg_activation_token: ?XdgActivationTokenFn = null,
 };
 
+pub const XdgActivationTokenFn = *const fn (ctx: ?*anyopaque, token: []const u8) void;
 pub const ActivateFn = *const fn (ctx: ?*anyopaque, x: i32, y: i32) void;
 pub const SecondaryActivateFn = *const fn (ctx: ?*anyopaque, x: i32, y: i32) void;
 pub const ContextMenuFn = *const fn (ctx: ?*anyopaque, x: i32, y: i32) void;
@@ -65,7 +67,6 @@ pub const ContextMenuFn = *const fn (ctx: ?*anyopaque, x: i32, y: i32) void;
 pub const Item = struct {
     conn: *Connection,
     cfg: *const Config,
-
     Category: goose.Property(GStr, .Read),
     Id: goose.Property(GStr, .Read),
     Title: goose.Property(GStr, .Read),
@@ -74,6 +75,15 @@ pub const Item = struct {
     IconThemePath: goose.Property(GStr, .Read),
     Menu: goose.Property(GPath, .Read),
     AttentionIconName: goose.Property(GStr, .Read) = goose.property(GStr, .Read, GStr.new("")),
+    ItemIsMenu: goose.Property(bool, .Read) = goose.property(bool, .Read, false),
+
+    NewIcon: goose.Signal(void) = goose.signal("NewIcon", void),
+    NewAttentionIcon: goose.Signal(void) = goose.signal("NewAttentionIcon", void),
+    NewOverlayIcon: goose.Signal(void) = goose.signal("NewOverlayIcon", void),
+    NewToolTip: goose.Signal(void) = goose.signal("NewToolTip", void),
+    NewTitle: goose.7 = goose.signal("NewTitle", void),
+    NewStatus: goose.Signal(GStr) = goose.signal("NewStatus", GStr),
+    IconPixmap: goose.Property([]const Pixmap, .Read),
 
     pub const INTERFACE_NAME = SNI_INTERFACE;
 
@@ -89,6 +99,14 @@ pub const Item = struct {
             .IconThemePath = goose.property(GStr, .Read, GStr.new(config.icon_theme_path)),
             .Menu = goose.property(GPath, .Read, GPath.new("/MenuBar")),
             .AttentionIconName = goose.property(GStr, .Read, GStr.new(config.attention_icon_name)),
+            .ItemIsMenu = goose.property(bool, .Read, false),
+            .NewIcon = goose.signal("NewIcon", void),
+            .NewAttentionIcon = goose.signal("NewAttentionIcon", void),
+            .NewOverlayIcon = goose.signal("NewOverlayIcon", void),
+            .NewToolTip = goose.signal("NewToolTip", void),
+            .NewTitle = goose.signal("NewTitle", void),
+            .NewStatus = goose.signal("NewStatus", GStr),
+            .IconPixmap = goose.property([]const Pixmap, .Read, config.icon_pixmap),
         };
     }
 
@@ -107,6 +125,12 @@ pub const Item = struct {
     pub fn ContextMenu(self: *@This(), x: i32, y: i32) !void {
         if (self.cfg.on_context_menu) |cb| {
             cb(self.cfg.user_ctx, x, y);
+        }
+    }
+
+    pub fn ProvideXdgActivationToken(self: *@This(), token: GStr) !void {
+        if (self.cfg.on_xdg_activation_token) |cb| {
+            cb(self.cfg.user_ctx, token.s);
         }
     }
 };

@@ -151,9 +151,10 @@ pub const Tray = struct {
         const self: *Tray = @ptrCast(@alignCast(ctx.?));
         var dec = goose.message.BodyDecoder.fromMessage(self.service.allocator, msg);
         _ = dec.decode(GStr) catch return;
+        _ = dec.decode(GStr) catch return;
         const new_owner = dec.decode(GStr) catch return;
         if (new_owner.s.len == 0) return;
-        std.debug.print("[tray] watcher reappeared; re-registering\n", .{});
+        std.debug.print("[tray] watcher appeared; re-registering\n", .{});
         self.announce() catch |e| std.debug.print("[tray] re-register failed: {any}\n", .{e});
     }
 
