@@ -1,7 +1,12 @@
 const std = @import("std");
 const goose = @import("goose");
+const GStr = goose.core.value.GStr;
 
 const Connection = goose.Connection;
+
+const PlatformDataValue = union(enum) {
+    s: GStr,
+};
 
 pub const Service = struct {
     allocator: std.mem.Allocator,
@@ -51,5 +56,37 @@ pub const Service = struct {
 
     pub fn processNext(self: *Service) !void {
         while (true) try self.dispatchOne();
+    }
+
+    pub fn activateApplication(
+        self: *Service,
+        app_name: [:0]const u8,
+        app_path: [:0]const u8,
+        token: ?[:0]const u8,
+    ) !void {
+        const conn = &self.conn;
+        const alloc = self.allocator;
+        const Variant = goose.core.value.Value.Variant(PlatformDataValue);
+        const Dict = goose.core.value.Value.Dict(GStr, Variant, std.StringHashMap(Variant));
+        var map = std.StringHashMap(Variant).init(alloc);
+        defer map.deinit();
+        if (token) |t| {
+            try map.put("activation-token", Variant.new(.{ .s = GStr.new(t) }));
+        }
+        var enc = try goose.message.BodyEncoder.encode(alloc, Dict.new(map));
+        defer enc.deinit();
+        var reply = try conn.methodCall(
+            app_name,
+            app_path,
+            "org.freedesktop.Application",
+            "Activate",
+            enc.signature(),
+            enc.body(),
+        );
+        defer conn.freeMessage(&reply);
+
+        if (reply.header.message_type == .Error) {
+            return error.ApplicationNotRunning;
+        }
     }
 };
