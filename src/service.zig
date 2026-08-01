@@ -141,4 +141,30 @@ pub const Service = struct {
         try conn.addMatch(match);
         try conn.registerSignalHandler(interface, member, handler, ctx);
     }
+
+    pub fn requestName(self: *Service, name: [:0]const u8) !void {
+        return self.conn.requestName(name);
+    }
+
+    pub fn nameHasOwner(self: *Service, name: [:0]const u8) !bool {
+        const conn = &self.conn;
+        const alloc = self.allocator;
+
+        var enc = try goose.message.BodyEncoder.encode(alloc, GStr.new(name));
+        defer enc.deinit();
+
+        var reply = try conn.methodCall(
+            "org.freedesktop.DBus",
+            "/org/freedesktop/DBus",
+            "org.freedesktop.DBus",
+            "NameHasOwner",
+            enc.signature(),
+            enc.body(),
+        );
+        defer conn.freeMessage(&reply);
+
+        if (reply.header.message_type == .Error) return error.NameCheckFailed;
+
+        var dec = goose.message.BodyDecoder.fromMessage(alloc, reply);
+        retur
 };
