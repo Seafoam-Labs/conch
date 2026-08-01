@@ -33,8 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .goose = .{
-            .url = "git+https://github.com/caroberrie/goose/#8c73e4caf5de67019eab103734ebd81cf5f222c0",
-            .hash = "goose-2.0.0-e9MzMGH_AgDxYpeHJbBtsxXSn--mriUMTOntNgk5Jy57",
+            .url = "git+https://github.com/caroberrie/goose/#75cee82abe8288d3afcb7fad56271f4a39fccb3e",
+            .hash = "goose-2.0.0-e9MzMMP_AgDqh_w5TeD_wcUEKqt_PHseShxvmknSxBJU",
         },
     },
     .paths = .{
