@@ -68,15 +68,22 @@ pub const Service = struct {
     ) !void {
         const conn = &self.conn;
         const alloc = self.allocator;
-        const Variant = goose.core.value.Value.Variant(PlatformDataValue);
-        const Dict = goose.core.value.Value.Dict(GStr, Variant, std.StringHashMap(Variant));
-        var map = std.StringHashMap(Variant).init(alloc);
-        defer map.deinit();
+        const GVariant = goose.core.value.GVariant;
+
+        var map = std.StringHashMap(GVariant).init(alloc);
+
         if (token) |t| {
-            try map.put("activation-token", Variant.new(.{ .s = GStr.new(t) }));
+            const key = try alloc.dupe(u8, "activation-token");
+            const val = GVariant{ .string = GStr.new(t) };
+            try map.put(key, val);
         }
-        var enc = try goose.message.BodyEncoder.encode(alloc, Dict.new(map));
+
+        var dict_variant = GVariant{ .dict = map };
+        defer dict_variant.deinit(alloc);
+
+        var enc = try goose.message.BodyEncoder.encode(alloc, dict_variant);
         defer enc.deinit();
+
         var reply = try conn.methodCall(
             app_name,
             app_path,
