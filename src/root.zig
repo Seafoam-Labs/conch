@@ -8,6 +8,9 @@ pub const item = @import("item.zig");
 pub const menu = @import("menu.zig");
 pub const mutableItem = @import("mutableItem.zig");
 
+const goose = @import("goose");
+pub const Message = goose.core.Message;
+
 pub const Service = service.Service;
 pub const Notifier = notifier.Notifier;
 pub const Notification = notifier.Notification;
