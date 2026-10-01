@@ -270,18 +270,15 @@ pub const MenuController = struct {
     state: *MenuState,
     name: [:0]const u8,
     path: [:0]const u8,
-    handle: ?usize = null,
 
     pub fn init(svc: *Service, state: *MenuState, name: [:0]const u8, path: [:0]const u8) MenuController {
         state.path = path;
         return .{ .service = svc, .state = state, .name = name, .path = path };
     }
 
-    pub fn register(self: *MenuController) !usize {
+    pub fn register(self: *MenuController) !void {
         const conn = self.service.connection();
-        const handle = try conn.registerObject(Menu, self.name, self.path, self.state);
-        self.handle = handle;
-        return handle;
+        try conn.registerObject(Menu, self.name, self.path, self.state);
     }
 
     pub fn invalidate(self: *MenuController) !void {
@@ -295,8 +292,7 @@ pub const MenuController = struct {
         });
         defer enc.deinit();
 
-        const serial = conn.serial_counter;
-        conn.serial_counter += 1;
+        const serial = conn.nextSerial();
         const header = goose.core.MessageHeader{
             .message_type = .Signal,
             .flags = 0x1,
