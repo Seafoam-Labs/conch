@@ -16,7 +16,7 @@ pub const Service = struct {
     conn: Connection,
 
     pub fn init(allocator: std.mem.Allocator, io: std.Io, env_map: *std.process.Environ.Map) !Service {
-        const conn = try Connection.init(allocator, .Session, io, env_map);
+        const conn = try Connection.initWithBackend(allocator, .Session, io, env_map, .poll);
         return .{
             .allocator = allocator,
             .io = io,
@@ -32,32 +32,34 @@ pub const Service = struct {
         return &self.conn;
     }
 
-    pub fn run(self: *Service, handle: usize) !void {
-        try self.conn.waitOnHandle(handle);
-    }
-
-    pub fn dispatchOne(self: *Service) !void {
-        var msg = try self.conn.waitMessage();
-        self.conn.freeMessage(&msg);
-    }
-
-    pub fn waitMessageTimeout(self: *Service, timeout: std.Io.Timeout) !?goose.core.Message {
-        return self.conn.waitMessageTimeout(timeout);
+    pub fn dispatchOne(self: *Service) !bool {
+        return self.conn.dispatch();
     }
 
     pub fn tickTimeout(self: *Service, timeout: std.Io.Timeout) !bool {
-        return self.conn.tickTimeout(timeout);
+        const conn = &self.conn;
+        if (!conn.hasDataToRead() and !try waitForReadable(conn.getFd(), timeout, self.io)) {
+            return false;
+        }
+
+        var handled = false;
+        while (try conn.dispatch()) handled = true;
+        return handled;
     }
 
     pub fn runEventLoop(self: *Service, comptime tick_ms: u64, ctx: anytype, comptime onTick: fn (@TypeOf(ctx)) void) !void {
+        const timeout: std.Io.Timeout = .{ .duration = .{
+            .raw = .fromMilliseconds(tick_ms),
+            .clock = .awake,
+        } };
         while (true) {
-            _ = try self.tickTimeout(.{ .duration = .fromMillis(tick_ms) });
+            _ = try self.tickTimeout(timeout);
             onTick(ctx);
         }
     }
 
     pub fn processNext(self: *Service) !void {
-        while (true) try self.dispatchOne();
+        while (try self.dispatchOne()) {}
     }
 
     pub fn activateApplication(
@@ -169,3 +171,15 @@ pub const Service = struct {
         return try dec.decode(bool);
     }
 };
+
+/// Blocks until the bus socket is readable or `timeout` elapses. A `.none`
+/// timeout waits indefinitely.
+fn waitForReadable(fd: std.posix.fd_t, timeout: std.Io.Timeout, io: std.Io) !bool {
+    const millis: i32 = if (timeout.toDurationFromNow(io)) |remaining|
+        @intCast(std.math.clamp(remaining.raw.toMilliseconds(), 0, std.math.maxInt(i32)))
+    else
+        -1;
+
+    var fds = [1]std.posix.pollfd{.{ .fd = fd, .events = std.posix.POLL.IN, .revents = 0 }};
+    return try std.posix.poll(&fds, millis) > 0;
+}

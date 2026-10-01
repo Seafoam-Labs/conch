@@ -49,6 +49,25 @@ pub const Tree = struct {
     }
 };
 
+fn hashItem(h: *std.hash.Wyhash, item: *const MenuItem) void {
+    h.update(std.mem.asBytes(&item.id));
+    const label_len: u64 = item.label.len;
+    h.update(std.mem.asBytes(&label_len));
+    h.update(item.label);
+    h.update(&[_]u8{@intFromEnum(item.type)});
+    h.update(&[_]u8{@intFromBool(item.enabled)});
+    h.update(&[_]u8{@intFromBool(item.visible)});
+    for (item.children) |*child| {
+        hashItem(h, child);
+    }
+}
+
+pub fn menuHash(root: *const MenuItem) u64 {
+    var h = std.hash.Wyhash.init(0);
+    hashItem(&h, root);
+    return h.final();
+}
+
 pub const LayoutValue = struct {
     item: *const MenuItem,
     depth: i32,
@@ -122,6 +141,7 @@ pub const MenuState = struct {
     revision: u32 = 0,
     path: []const u8 = "/MenuBar",
     current_tree: Tree = undefined,
+    delivered_hash: ?u64 = null,
 
     pub fn init(backing: std.mem.Allocator, builder: BuilderFn) MenuState {
         return .{
@@ -138,6 +158,22 @@ pub const MenuState = struct {
         _ = self.arena.reset(.retain_capacity);
         self.current_tree = try self.builder(self.ctx, self.arena.allocator());
         return &self.current_tree.root;
+    }
+
+    fn markDelivered(self: *MenuState, root: *const MenuItem, whole: bool) void {
+        self.delivered_hash = if (whole) menuHash(root) else null;
+    }
+
+    pub fn refreshIfChanged(self: *MenuState) anyerror!bool {
+        const root = try self.buildTree();
+        const hash = menuHash(root);
+        if (self.delivered_hash) |known| {
+            if (known == hash) return false;
+        }
+
+        self.delivered_hash = hash;
+        self.revision += 1;
+        return true;
     }
 };
 
@@ -157,6 +193,7 @@ pub const Menu = struct {
     pub fn GetLayout(self: *@This(), parent_id: i32, recursion_depth: i32, property_names: []const GStr) !LayoutReturn {
         _ = property_names;
         const root = try self.state.buildTree();
+        self.state.markDelivered(root, parent_id == 0 and recursion_depth < 0);
 
         const item = if (parent_id == 0) root else self.state.current_tree.find(parent_id) orelse root;
         return .{
@@ -188,9 +225,8 @@ pub const Menu = struct {
     }
 
     pub fn AboutToShow(self: *@This(), id: i32) !bool {
-        _ = self;
         _ = id;
-        return true;
+        return self.state.refreshIfChanged();
     }
 
     pub const GroupEvent = struct {
@@ -234,18 +270,15 @@ pub const MenuController = struct {
     state: *MenuState,
     name: [:0]const u8,
     path: [:0]const u8,
-    handle: ?usize = null,
 
     pub fn init(svc: *Service, state: *MenuState, name: [:0]const u8, path: [:0]const u8) MenuController {
         state.path = path;
         return .{ .service = svc, .state = state, .name = name, .path = path };
     }
 
-    pub fn register(self: *MenuController) !usize {
+    pub fn register(self: *MenuController) !void {
         const conn = self.service.connection();
-        const handle = try conn.registerObject(Menu, self.name, self.path, self.state);
-        self.handle = handle;
-        return handle;
+        try conn.registerObject(Menu, self.name, self.path, self.state);
     }
 
     pub fn invalidate(self: *MenuController) !void {
@@ -259,8 +292,7 @@ pub const MenuController = struct {
         });
         defer enc.deinit();
 
-        const serial = conn.serial_counter;
-        conn.serial_counter += 1;
+        const serial = conn.nextSerial();
         const header = goose.core.MessageHeader{
             .message_type = .Signal,
             .flags = 0x1,
@@ -538,4 +570,105 @@ test "GroupPropsValue: empty id list yields empty array" {
     // array length word should be 0 (no elements)
     const arr_len = std.mem.readInt(u32, buf.items[0..4], .little);
     try std.testing.expectEqual(@as(u32, 0), arr_len);
+}
+
+test "menuHash distinguishes every property a client renders" {
+    const base = MenuItem{ .id = 1, .label = "Open" };
+    const h = menuHash(&base);
+
+    try std.testing.expectEqual(h, menuHash(&MenuItem{ .id = 1, .label = "Open" }));
+    try std.testing.expect(h != menuHash(&MenuItem{ .id = 2, .label = "Open" }));
+    try std.testing.expect(h != menuHash(&MenuItem{ .id = 1, .label = "Quit" }));
+    try std.testing.expect(h != menuHash(&MenuItem{ .id = 1, .label = "Open", .enabled = false }));
+    try std.testing.expect(h != menuHash(&MenuItem{ .id = 1, .label = "Open", .visible = false }));
+    try std.testing.expect(h != menuHash(&MenuItem{ .id = 1, .label = "Open", .type = .separator }));
+    try std.testing.expect(h != menuHash(&MenuItem{ .id = 1, .label = "Open", .children = &.{.{ .id = 2 }} }));
+}
+
+test "menuHash depends on nested content and child order, not allocation" {
+    const ab = MenuItem{ .id = 0, .children = &.{
+        .{ .id = 1, .label = "More", .children = &.{.{ .id = 3, .label = "Deep" }} },
+        .{ .id = 2, .label = "Quit" },
+    } };
+    const ba = MenuItem{ .id = 0, .children = &.{
+        .{ .id = 2, .label = "Quit" },
+        .{ .id = 1, .label = "More", .children = &.{.{ .id = 3, .label = "Deep" }} },
+    } };
+    const deep_changed = MenuItem{ .id = 0, .children = &.{
+        .{ .id = 1, .label = "More", .children = &.{.{ .id = 3, .label = "Deeper" }} },
+        .{ .id = 2, .label = "Quit" },
+    } };
+
+    // A structurally equal tree built elsewhere hashes the same.
+    const ab_copy = MenuItem{ .id = 0, .children = &.{
+        .{ .id = 1, .label = "More", .children = &.{.{ .id = 3, .label = "Deep" }} },
+        .{ .id = 2, .label = "Quit" },
+    } };
+    try std.testing.expectEqual(menuHash(&ab), menuHash(&ab_copy));
+    try std.testing.expect(menuHash(&ab) != menuHash(&ba));
+    try std.testing.expect(menuHash(&ab) != menuHash(&deep_changed));
+}
+
+const RefreshCase = struct {
+    label: []const u8 = "Open",
+    extra: bool = false,
+};
+
+fn refreshTreeFor(ctx: ?*anyopaque, arena: std.mem.Allocator) anyerror!Tree {
+    const case: *const RefreshCase = @ptrCast(@alignCast(ctx));
+    var items = std.ArrayList(MenuItem).empty;
+    try items.append(arena, .{ .id = 1, .label = case.label });
+    if (case.extra) {
+        try items.append(arena, .{ .id = 2, .label = "Quit" });
+    }
+    return .{ .root = .{ .id = 0, .children = try items.toOwnedSlice(arena) } };
+}
+
+test "refreshIfChanged only reports an update when the rebuild differs" {
+    const alloc = std.testing.allocator;
+    var case: RefreshCase = .{};
+    var state = MenuState.init(alloc, refreshTreeFor);
+    defer state.deinit();
+    state.ctx = &case;
+
+    // Nothing has been delivered yet, so the client has to be told to fetch.
+    try std.testing.expect(try state.refreshIfChanged());
+    const revision = state.revision;
+
+    // Rebuilding identical content must not ask for a refresh: that is what
+    // made clients tear down the submenu the user had just opened.
+    try std.testing.expect(!(try state.refreshIfChanged()));
+    try std.testing.expect(!(try state.refreshIfChanged()));
+    try std.testing.expectEqual(revision, state.revision);
+
+    case.label = "Reopen";
+    try std.testing.expect(try state.refreshIfChanged());
+    try std.testing.expectEqual(revision + 1, state.revision);
+    try std.testing.expect(!(try state.refreshIfChanged()));
+
+    case.extra = true;
+    try std.testing.expect(try state.refreshIfChanged());
+    try std.testing.expectEqual(revision + 2, state.revision);
+}
+
+test "GetLayout records what the client received" {
+    const alloc = std.testing.allocator;
+    var case: RefreshCase = .{};
+    var state = MenuState.init(alloc, refreshTreeFor);
+    defer state.deinit();
+    state.ctx = &case;
+
+    var menu = Menu.init(@as(*Connection, undefined), &state);
+
+    // A full fetch tells us exactly what the client holds.
+    _ = try menu.GetLayout(0, -1, &.{});
+    try std.testing.expect(!(try state.refreshIfChanged()));
+
+    // A partial fetch does not, so we fall back to reporting an update.
+    _ = try menu.GetLayout(0, 1, &.{});
+    try std.testing.expect(try state.refreshIfChanged());
+    try std.testing.expect(!(try state.refreshIfChanged()));
+
+    _ = try menu.GetLayout(1, -1, &.{});
+    try std.testing.expect(try state.refreshIfChanged());
 }

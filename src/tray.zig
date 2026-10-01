@@ -19,7 +19,6 @@ pub const Tray = struct {
     service: *Service,
     cfg: Config,
     name: [:0]const u8,
-    handle: ?usize = null,
 
     pub fn init(svc: *Service, cfg: Config) !Tray {
         const pid = std.os.linux.getpid();
@@ -31,11 +30,10 @@ pub const Tray = struct {
         self.service.allocator.free(self.name);
     }
 
-    pub fn register(self: *Tray) !usize {
+    pub fn register(self: *Tray) !void {
         const conn = self.service.connection();
 
-        const handle = try conn.registerObject(Item, self.name, ITEM_PATH, &self.cfg);
-        self.handle = handle;
+        try conn.registerObject(Item, self.name, ITEM_PATH, &self.cfg);
 
         try conn.addMatch(
             "type='signal',interface='org.freedesktop.DBus',member='NameOwnerChanged',arg0='org.kde.StatusNotifierWatcher'",
@@ -49,31 +47,34 @@ pub const Tray = struct {
 
         try self.announce();
         std.debug.print("[tray] registered as {s}\n", .{self.name});
-        return handle;
+    }
+
+    fn registeredItem(self: *Tray) !*Item {
+        const conn = self.service.connection();
+        for (conn.registered_interfaces.items) |*wrapper| {
+            if (std.mem.eql(u8, wrapper.path, ITEM_PATH)) {
+                return @ptrCast(@alignCast(wrapper.instance));
+            }
+        }
+        return error.TrayNotRegistered;
     }
 
     pub fn emitNewIcon(self: *Tray, icon_name: [:0]const u8) !void {
-        const conn = self.service.connection();
-        const handle = self.handle orelse return error.TrayNotRegistered;
-        const it: *Item = @ptrCast(@alignCast(conn.registered_interfaces.items[handle].instance));
+        const it = try self.registeredItem();
         it.IconName = goose.property(GStr, .Read, GStr.new(icon_name));
 
         try self.emit_signal("NewIcon");
     }
 
     pub fn emitNewTitle(self: *Tray, title: [:0]const u8) !void {
-        const conn = self.service.connection();
-        const handle = self.handle orelse return error.TrayNotRegistered;
-        const it: *Item = @ptrCast(@alignCast(conn.registered_interfaces.items[handle].instance));
+        const it = try self.registeredItem();
         it.Title = goose.property(GStr, .Read, GStr.new(title));
 
         try self.emit_signal("NewTitle");
     }
 
     pub fn emitStatus(self: *Tray, status: [:0]const u8) !void {
-        const conn = self.service.connection();
-        const handle = self.handle orelse return error.TrayNotRegistered;
-        const it: *Item = @ptrCast(@alignCast(conn.registered_interfaces.items[handle].instance));
+        const it = try self.registeredItem();
         it.Status = goose.property(GStr, .Read, GStr.new(status));
 
         try self.emit_signal("NewStatus");
@@ -84,26 +85,21 @@ pub const Tray = struct {
     }
 
     pub fn setStatus(self: *Tray, status: item.Status) !void {
-        const conn = self.service.connection();
-        const handle = self.handle orelse return error.NotRegistered;
-        const it: *Item = @ptrCast(@alignCast(conn.registered_interfaces.items[handle].instance));
+        const it = try self.registeredItem();
         it.Status = goose.property(GStr, .Read, GStr.new(status.wire()));
 
         try self.emit_signal("NewStatus");
     }
 
     pub fn setAttentionIcon(self: *Tray, name: [:0]const u8) !void {
-        const conn = self.service.connection();
-        const handle = self.handle orelse return error.NotRegistered;
-        const it: *item.Item = @ptrCast(@alignCast(conn.registered_interfaces.items[handle].instance));
+        const it = try self.registeredItem();
         it.AttentionIconName = goose.property(GStr, .Read, GStr.new(name));
         try self.emit_signal("NewAttentionIcon");
     }
 
     fn emit_signal(self: *Tray, member: [:0]const u8) !void {
         const conn = self.service.connection();
-        const serial = conn.serial_counter;
-        conn.serial_counter += 1;
+        const serial = conn.nextSerial();
 
         const header = core.MessageHeader{
             .message_type = .Signal,
@@ -127,8 +123,7 @@ pub const Tray = struct {
         var enc = try goose.message.BodyEncoder.encode(alloc, GStr.new(self.name));
         defer enc.deinit();
 
-        const serial = conn.serial_counter;
-        conn.serial_counter += 1;
+        const serial = conn.nextSerial();
 
         const header = core.MessageHeader{
             .message_type = .MethodCall,
