@@ -25,7 +25,7 @@
     .fingerprint = 0x34052af1a2c5d693, // Changing this has security and trust implications.
     // Tracks the earliest Zig version that the package considers to be a
     // supported use case.
-    .minimum_zig_version = "0.16.0",
+    .minimum_zig_version = "0.17.0",
     // This field is optional.
     // Each dependency must either provide a `url` and `hash`, or a `path`.
     // `zig build --fetch` can be used to fetch all dependencies of a package, recursively.
@@ -33,8 +33,8 @@
     // internet connectivity.
     .dependencies = .{
         .goose = .{
-            .url = "git+https://github.com/luxluth/goose.git#d0393b6ff747e826d5a92ee0a677313059c139f6",
-            .hash = "goose-3.2.0-e9MzMExuAwB6AF1JQego8uHNOxEshBATGi4Xo9I1oDYY",
+            .url = "git+https://github.com/luxluth/goose.git#8e24c3c864a27d26d8cf6f9dfee92951eb47a7a7",
+            .hash = "goose-4.0.1-e9MzMJg3BABXxlhF04kBiycvfMTgQNn4VuI3I7yU6PWw",
         },
     },
     .paths = .{
